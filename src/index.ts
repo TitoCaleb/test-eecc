@@ -1,6 +1,13 @@
 import * as PDFDocument from "pdfkit";
 import * as fs from "fs";
-import { FondoData, FundAPI, PortfolioData, PosicionData } from "./interface";
+import {
+  FondoData,
+  FundAPI,
+  PortfolioData,
+  PosicionData,
+  TransaccionAPI,
+  TransaccionData,
+} from "./interface";
 
 // Función para convertir los datos de la API al formato de la tabla
 const transformFundsData = (funds: FundAPI[]): FondoData[] => {
@@ -71,6 +78,64 @@ const transformPortfolioData = (
         saldoUSD,
       };
     });
+};
+
+// Función para convertir timestamp a fecha legible
+const formatDate = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+// Función para transformar transacciones de la API al formato de la tabla
+const transformTransaccionesData = (
+  transacciones: TransaccionAPI[]
+): TransaccionData[] => {
+  return transacciones.map((transaccion) => {
+    // Fecha de solicitud: creationDate formateado
+    const fechaSolicitud = formatDate(transaccion.creationDate);
+
+    // Fecha de asignación: priceDate formateado
+    const fechaAsignacion = formatDate(transaccion.priceDate);
+
+    // Fondo mutuo: fund.id + fund.series
+    const fondoMutuo = `${transaccion.fund.id} ${transaccion.fund.series}`;
+
+    // Tipo de movimiento: traducir type
+    const tipoMovimientoMap: { [key: string]: string } = {
+      BUY: "Compra",
+      SELL: "Venta",
+      TRANSFER_IN: "Transferencia Entrada",
+      TRANSFER_OUT: "Transferencia Salida",
+    };
+    const tipoMovimiento =
+      tipoMovimientoMap[transaccion.type] || transaccion.type;
+
+    // Número de cuotas: shares (o 0 si no existe)
+    const numCuotas = transaccion.shares || 0;
+
+    // Valor cuota: price (o 0 si no existe)
+    const valorCuota = transaccion.price || 0;
+
+    // Moneda: currency
+    const moneda = transaccion.currency;
+
+    // Monto: amount
+    const monto = transaccion.amount;
+
+    return {
+      fechaSolicitud,
+      fechaAsignacion,
+      fondoMutuo,
+      tipoMovimiento,
+      numCuotas,
+      valorCuota,
+      moneda,
+      monto,
+    };
+  });
 };
 
 const doc = new PDFDocument({
@@ -362,6 +427,10 @@ const distribuciones = (doc: any, distributionY: number) => {
   const fondoData = [
     { label: "Fondo USA 500", value: 45, color: "#62e28d" },
     { label: "Fondo Renta Global", value: 30, color: "#8a9aa2" },
+    { label: "Fondo Balanceado", value: 25, color: "#292243" },
+    { label: "Fondo Balanceado", value: 25, color: "#292243" },
+    { label: "Fondo Balanceado", value: 25, color: "#292243" },
+    { label: "Fondo Balanceado", value: 25, color: "#292243" },
     { label: "Fondo Balanceado", value: 25, color: "#292243" },
   ];
 
@@ -692,6 +761,185 @@ const posicionesDelPortafolio = (
   }
 };
 
+const cabeceraTablaTransacciones = (
+  doc: any,
+  barMargin: number,
+  headers: {
+    label: string;
+    width: number;
+  }[]
+) => {
+  const barHeight = 35; // Aumentado para que quepa el texto con saltos de línea
+
+  // Fondo encabezado
+  doc
+    .rect(barMargin, 120, doc.page.width - barMargin * 2, barHeight)
+    .fill("#1d113e");
+
+  // Calcular posiciones dinámicas de las columnas para ocupar todo el ancho
+  const tableWidth = doc.page.width - barMargin * 2;
+  const columnWidths = headers.map((h) => h.width * tableWidth);
+
+  // Calcular posiciones X de cada columna
+  const columnX: number[] = [];
+  let currentX = barMargin; // Sin padding inicial para usar todo el ancho
+  for (let i = 0; i < columnWidths.length; i++) {
+    columnX.push(currentX);
+    currentX += columnWidths[i];
+  }
+
+  doc.font("roboto-bold").fontSize(9).fillColor("white");
+
+  headers.forEach((h, i) => {
+    // Calcular centrado vertical basado en el número de líneas
+    const numLines = h.label.split("\n").length;
+    const lineHeight = 10; // Altura aproximada por línea con fontSize 9
+    const textHeight = numLines * lineHeight;
+    const textYPosition = 120 + (barHeight - textHeight) / 2;
+
+    // Todos los textos centrados horizontalmente
+    doc.text(h.label, columnX[i], textYPosition, {
+      width: columnWidths[i],
+      align: "center",
+      lineGap: 2,
+    });
+  });
+
+  // Generar filas dinámicamente desde fondosData
+  doc.font("roboto-regular").fontSize(10).fillColor("#000000");
+
+  return { columnX, columnWidths };
+};
+
+const transaccionesDeLosUltimos3Meses = (
+  doc: any,
+  transacciones: TransaccionData[]
+) => {
+  const barMargin = 50;
+  // Cada tabla debe estar en su propia página
+  doc.addPage();
+
+  // ✅ Marca de agua
+  marcaDeAgua(doc);
+
+  // Titulo de la seccion
+  subTitulo(doc, "Transacciones de los últimos 3 meses");
+
+  const { columnX, columnWidths } = cabeceraTablaTransacciones(doc, barMargin, [
+    { label: "FECHA DE\nSOLICITUD", width: 0.12 },
+    { label: "FECHA DE\nASIGNACIÓN", width: 0.13 },
+    { label: "FONDO MUTUO", width: 0.2 },
+    { label: "TIPO DE\nMOVIMIENTO", width: 0.12 },
+    { label: "N° DE\nCUOTAS", width: 0.11 },
+    { label: "VALOR\nCUOTA", width: 0.11 },
+    { label: "MONEDA", width: 0.1 },
+    { label: "MONTO", width: 0.11 },
+  ]);
+
+  // Renderizar filas de transacciones
+  let currentY = 155; // Posición inicial después del header
+  const rowHeight = 25;
+  const fontSize = 9;
+
+  doc.font("roboto-regular").fontSize(fontSize).fillColor("#000000");
+
+  transacciones.forEach((transaccion, index) => {
+    // Verificar si necesitamos una nueva página
+    if (currentY + rowHeight > doc.page.height - 50) {
+      doc.addPage();
+      marcaDeAgua(doc);
+      currentY = 50;
+    }
+
+    // Fondo alternado para las filas
+    if (index % 2 === 0) {
+      doc
+        .rect(
+          barMargin,
+          currentY - 5,
+          doc.page.width - barMargin * 2,
+          rowHeight
+        )
+        .fill("#f5f5f5");
+      doc.fillColor("#000000");
+    }
+
+    // Columna 0: Fecha de solicitud (centrado)
+    doc.text(transaccion.fechaSolicitud, columnX[0], currentY, {
+      width: columnWidths[0],
+      align: "center",
+    });
+
+    // Columna 1: Fecha de asignación (centrado)
+    doc.text(transaccion.fechaAsignacion, columnX[1], currentY, {
+      width: columnWidths[1],
+      align: "center",
+    });
+
+    // Columna 2: Fondo mutuo (izquierda)
+    doc.text(transaccion.fondoMutuo, columnX[2] + 5, currentY, {
+      width: columnWidths[2] - 10,
+      align: "left",
+    });
+
+    // Columna 3: Tipo de movimiento (centrado)
+    doc.text(transaccion.tipoMovimiento, columnX[3], currentY, {
+      width: columnWidths[3],
+      align: "center",
+    });
+
+    // Columna 4: N° de cuotas (centrado)
+    doc.text(
+      transaccion.numCuotas.toLocaleString("es-PE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4,
+      }),
+      columnX[4],
+      currentY,
+      {
+        width: columnWidths[4],
+        align: "center",
+      }
+    );
+
+    // Columna 5: Valor cuota (centrado)
+    doc.text(
+      transaccion.valorCuota.toLocaleString("es-PE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4,
+      }),
+      columnX[5],
+      currentY,
+      {
+        width: columnWidths[5],
+        align: "center",
+      }
+    );
+
+    // Columna 6: Moneda (centrado)
+    doc.text(transaccion.moneda, columnX[6], currentY, {
+      width: columnWidths[6],
+      align: "center",
+    });
+
+    // Columna 7: Monto (derecha)
+    doc.text(
+      transaccion.monto.toLocaleString("es-PE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+      columnX[7],
+      currentY,
+      {
+        width: columnWidths[7] - 5,
+        align: "right",
+      }
+    );
+
+    currentY += rowHeight;
+  });
+};
+
 // Datos de ejemplo - Estructura real de la API
 const fundsFromAPI: FundAPI[] = [
   {
@@ -955,6 +1203,54 @@ const portfolioDataEjemplo: PortfolioData = {
         series: "SERIES_B",
         sharePrice: 10.02447606,
       },
+      {
+        balance: {
+          amount: 1361.73,
+          currency: "USD",
+          shares: 135.84014336,
+        },
+        costBasis: 1397.39,
+        currency: "USD",
+        id: "usa500USD",
+        returns: {
+          realized: -602.6032411,
+          unRealized: -35.6667589,
+        },
+        series: "SERIES_B",
+        sharePrice: 10.02447606,
+      },
+      {
+        balance: {
+          amount: 1361.73,
+          currency: "USD",
+          shares: 135.84014336,
+        },
+        costBasis: 1397.39,
+        currency: "USD",
+        id: "usa500USD",
+        returns: {
+          realized: -602.6032411,
+          unRealized: -35.6667589,
+        },
+        series: "SERIES_B",
+        sharePrice: 10.02447606,
+      },
+      {
+        balance: {
+          amount: 1361.73,
+          currency: "PEN",
+          shares: 135.84014336,
+        },
+        costBasis: 1397.39,
+        currency: "PEN",
+        id: "usa500USD",
+        returns: {
+          realized: -602.6032411,
+          unRealized: -35.6667589,
+        },
+        series: "SERIES_B",
+        sharePrice: 10.02447606,
+      },
     ],
     id: "4482f8f1-d4ba-47e6-a8c6-b3eff2f7a2d3",
   },
@@ -963,6 +1259,138 @@ const portfolioDataEjemplo: PortfolioData = {
 // Transformar los datos del portafolio al formato de posiciones
 const posicionesDataEjemplo = transformPortfolioData(portfolioDataEjemplo);
 const posicionesDataEjemplo2 = transformPortfolioData(portfolioDataEjemplo);
+
+// Datos de ejemplo para transacciones
+const transaccionesFromAPI: TransaccionAPI[] = [
+  {
+    customerId: "95f76a7d-17a5-41a2-b42a-60bcbf46db79",
+    id: "de351e3c-b095-4518-aae6-209856476ffa",
+    amount: 100,
+    comments: {
+      confirmed: {
+        at: 1750085825889,
+        by: "sebastian",
+        comment: "confirmado",
+      },
+    },
+    confirmedBy: "sebastian",
+    creationDate: 1741374018042,
+    currency: "USD",
+    fund: {
+      id: "usa500USD",
+      series: "SERIES_B",
+    },
+    lastUpdate: 1750085826749,
+    origin: {
+      bank: {
+        id: "1",
+        transaction: {
+          id: "12121",
+        },
+      },
+    },
+    priceDate: 1748365946061,
+    requestData: {
+      amount: 100,
+      creationDate: 1748279546061,
+    },
+    settlementDate: 1748279546061,
+    status: "CONFIRMED",
+    transactionDate: 1748279546061,
+    type: "BUY",
+    shares: 50.25,
+    price: 1.99,
+  },
+  {
+    customerId: "95f76a7d-17a5-41a2-b42a-60bcbf46db79",
+    id: "abc123-456-789",
+    amount: 500,
+    creationDate: 1743374018042,
+    currency: "PEN",
+    fund: {
+      id: "globalGrowth",
+      series: "SERIES_A",
+    },
+    lastUpdate: 1750085826749,
+    priceDate: 1748465946061,
+    requestData: {
+      amount: 500,
+      creationDate: 1748379546061,
+    },
+    settlementDate: 1748379546061,
+    status: "CONFIRMED",
+    transactionDate: 1748379546061,
+    type: "SELL",
+    shares: 125.5,
+    price: 3.98,
+  },
+  {
+    customerId: "95f76a7d-17a5-41a2-b42a-60bcbf46db79",
+    id: "de351e3c-b095-4518-aae6-209856476ffa",
+    amount: 100,
+    comments: {
+      confirmed: {
+        at: 1750085825889,
+        by: "sebastian",
+        comment: "confirmado",
+      },
+    },
+    confirmedBy: "sebastian",
+    creationDate: 1741374018042,
+    currency: "USD",
+    fund: {
+      id: "usa500USD",
+      series: "SERIES_B",
+    },
+    lastUpdate: 1750085826749,
+    origin: {
+      bank: {
+        id: "1",
+        transaction: {
+          id: "12121",
+        },
+      },
+    },
+    priceDate: 1748365946061,
+    requestData: {
+      amount: 100,
+      creationDate: 1748279546061,
+    },
+    settlementDate: 1748279546061,
+    status: "CONFIRMED",
+    transactionDate: 1748279546061,
+    type: "BUY",
+    shares: 50.25,
+    price: 1.99,
+  },
+  {
+    customerId: "95f76a7d-17a5-41a2-b42a-60bcbf46db79",
+    id: "abc123-456-789",
+    amount: 500,
+    creationDate: 1743374018042,
+    currency: "PEN",
+    fund: {
+      id: "globalGrowth",
+      series: "SERIES_A",
+    },
+    lastUpdate: 1750085826749,
+    priceDate: 1748465946061,
+    requestData: {
+      amount: 500,
+      creationDate: 1748379546061,
+    },
+    settlementDate: 1748379546061,
+    status: "CONFIRMED",
+    transactionDate: 1748379546061,
+    type: "SELL",
+    shares: 125.5,
+    price: 3.98,
+  },
+];
+
+// Transformar las transacciones al formato de la tabla
+const transaccionesDataEjemplo =
+  transformTransaccionesData(transaccionesFromAPI);
 
 // Stream
 doc.pipe(fs.createWriteStream("documento.pdf"));
@@ -978,6 +1406,7 @@ doc.registerFont("roboto-medium", "fonts/Roboto-Medium.ttf");
 portada(doc);
 resumenPortafolio(doc, fondosDataEjemplo);
 posicionesDelPortafolio(doc, posicionesDataEjemplo, posicionesDataEjemplo2);
+transaccionesDeLosUltimos3Meses(doc, transaccionesDataEjemplo);
 
 // Cerrar PDF
 doc.end();

@@ -77,3 +77,64 @@ export interface PosicionData {
   saldo: number;
   saldoUSD: number;
 }
+
+// Interfaces para transacciones
+export interface TransaccionComments {
+  confirmed?: {
+    at: number;
+    by: string;
+    comment: string;
+  };
+}
+
+export interface TransaccionFund {
+  id: string;
+  series: string;
+}
+
+export interface TransaccionOrigin {
+  bank: {
+    id: string;
+    transaction: {
+      id: string;
+    };
+  };
+}
+
+export interface TransaccionRequestData {
+  amount: number;
+  creationDate: number;
+}
+
+export interface TransaccionAPI {
+  customerId: string;
+  id: string;
+  amount: number;
+  comments?: TransaccionComments;
+  confirmedBy?: string;
+  creationDate: number;
+  currency: string;
+  fund: TransaccionFund;
+  lastUpdate: number;
+  origin?: TransaccionOrigin;
+  priceDate: number;
+  requestData: TransaccionRequestData;
+  settlementDate: number;
+  status: string;
+  transactionDate: number;
+  type: string;
+  shares?: number;
+  price?: number;
+}
+
+// Interfaz para los datos mostrados en la tabla de transacciones
+export interface TransaccionData {
+  fechaSolicitud: string; // creationDate formateado
+  fechaAsignacion: string; // priceDate formateado
+  fondoMutuo: string; // fund.id + fund.series
+  tipoMovimiento: string; // type
+  numCuotas: number; // shares
+  valorCuota: number; // price
+  moneda: string; // currency
+  monto: number; // amount
+}
