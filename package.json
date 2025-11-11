@@ -12,10 +12,15 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.928.0",
+    "@aws-sdk/client-lambda": "^3.928.0",
+    "@aws-sdk/credential-providers": "^3.928.0",
+    "@aws-sdk/lib-dynamodb": "^3.928.0",
     "pdfkit": "^0.17.2",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
-    "@types/pdfkit": "^0.17.3"
+    "@types/pdfkit": "^0.17.3",
+    "zod": "^4.1.12"
   }
 }
