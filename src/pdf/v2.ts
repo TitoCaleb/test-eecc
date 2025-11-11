@@ -28,6 +28,8 @@ export function generatePdf(eecc: Eecc) {
   portada(doc, eecc.year, eecc.month);
 
   resumenPortafolio(doc, eecc);
+  posicionesDelPortafolio(doc, eecc);
+  transaccionesDeLosUltimos3Meses(doc, eecc);
 
   // Cerrar PDF
   doc.end();
@@ -212,13 +214,15 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
     USD: [],
   };
 
-  eecc.portfolioHistoryOfMonth.portfolio.funds.forEach((fondo) => {
-    if (fondo.balance.currency === "PEN") {
-      posicionesPorMoneda.PEN.push(fondo);
-    } else if (fondo.balance.currency === "USD") {
-      posicionesPorMoneda.USD.push(fondo);
-    }
-  });
+  eecc.portfolioHistoryOfMonth.portfolio.funds
+    .filter((fondo) => fondo.id !== "cash")
+    .forEach((fondo) => {
+      if (fondo.balance.currency === "PEN") {
+        posicionesPorMoneda.PEN.push(fondo);
+      } else if (fondo.balance.currency === "USD") {
+        posicionesPorMoneda.USD.push(fondo);
+      }
+    });
 
   // Cada tabla debe estar en su propia página
   doc.addPage();
@@ -259,7 +263,7 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
 
     // Texto del encabezado (en negrita)
     doc
-      .font("roboto-bold")
+      .font("gilroy-bold")
       .fontSize(10)
       .fillColor("#000000")
       .text(label, columnX[1] + 5, rowY + textVerticalOffset, {
@@ -267,7 +271,7 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
         align: "left",
       });
 
-    doc.font("roboto-regular"); // Restaurar fuente normal
+    doc.font("gilroy-regular"); // Restaurar fuente normal
     currentRowIndex++;
   };
 
@@ -291,31 +295,14 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
 
     // Formatear valores
     const numeroFila = rowNum.toString();
-    const numCuotasFormateado = posicion.numCuotas.toLocaleString("es-PE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 8,
-    });
-    const valorCuotaFormateado = posicion.valorCuota.toLocaleString("es-PE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 8,
-    });
-    const saldoFormateado = posicion.saldo.toLocaleString("es-PE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const saldoUSDFormateado = posicion.saldoUSD.toLocaleString("es-PE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
 
     const row = [
       numeroFila,
-      posicion.fondo,
-      posicion.saldoAl,
-      numCuotasFormateado,
-      valorCuotaFormateado,
-      saldoFormateado,
-      saldoUSDFormateado,
+      `${fondo.id} ${fondo.series}`,
+      fondo.balance.amount,
+      fondo.balance.shares,
+      fondo.sharePrice,
+      fondo.balance.amount,
     ];
 
     // Posición Y del texto (centrado verticalmente en el fondo)
@@ -342,11 +329,7 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
   };
 
   // Función para dibujar una fila de gran total por moneda
-  const drawGranTotal = (
-    totalSaldo: number,
-    totalSaldoUSD: number,
-    labelText: string
-  ) => {
+  const drawGranTotal = (totalSaldo: number, labelText: string) => {
     const rowY =
       140 + rowMargin + currentRowIndex * (rowBackgroundHeight + rowMargin);
 
@@ -362,7 +345,7 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
 
     // Texto del gran total en negrita y blanco
     doc
-      .font("roboto-bold")
+      .font("gilroy-bold")
       .fontSize(10)
       .fillColor("white")
       .text(labelText, columnX[1] + 5, rowY + textVerticalOffset, {
@@ -375,10 +358,6 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-    const saldoUSDFormateado = totalSaldoUSD.toLocaleString("es-PE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
 
     // Mostrar totales en las columnas correspondientes
     doc.text(saldoFormateado, columnX[5], rowY + textVerticalOffset, {
@@ -386,12 +365,7 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
       align: "center",
     });
 
-    doc.text(saldoUSDFormateado, columnX[6], rowY + textVerticalOffset, {
-      width: columnWidths[6],
-      align: "center",
-    });
-
-    doc.font("roboto-regular").fillColor("#000000"); // Restaurar fuente normal y color
+    doc.font("gilroy-regular").fillColor("#000000"); // Restaurar fuente normal y color
     currentRowIndex++;
   };
 
@@ -410,15 +384,11 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
     posicionesPorMoneda.USD.forEach((posicion) => {
       drawDataRow(posicion, globalRowNumber);
       globalRowNumber++;
-      totalesPorMoneda.USD.saldo += posicion.saldo;
-      totalesPorMoneda.USD.saldoUSD += posicion.saldoUSD;
+      totalesPorMoneda.USD.saldo += posicion.balance.amount;
+      totalesPorMoneda.USD.saldoUSD += posicion.balance.amount;
     });
 
-    drawGranTotal(
-      totalesPorMoneda.USD.saldo,
-      totalesPorMoneda.USD.saldoUSD,
-      "Gran total $"
-    );
+    drawGranTotal(totalesPorMoneda.USD.saldo, "Gran total $");
   }
 
   // Grupo PEN
@@ -428,15 +398,10 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
     posicionesPorMoneda.PEN.forEach((posicion) => {
       drawDataRow(posicion, globalRowNumber);
       globalRowNumber++;
-      totalesPorMoneda.PEN.saldo += posicion.saldo;
-      totalesPorMoneda.PEN.saldoUSD += posicion.saldoUSD;
+      totalesPorMoneda.PEN.saldo += posicion.balance.amount;
     });
 
-    drawGranTotal(
-      totalesPorMoneda.PEN.saldo,
-      totalesPorMoneda.PEN.saldoUSD,
-      "Gran total S/."
-    );
+    drawGranTotal(totalesPorMoneda.PEN.saldo, "Gran total S/.");
   }
 };
 
@@ -658,5 +623,165 @@ const drawPieChart = (
           lineBreak: false,
         }
       );
+  });
+};
+
+const cabeceraTablaTransacciones = (
+  doc: any,
+  barMargin: number,
+  headers: {
+    label: string;
+    width: number;
+  }[]
+) => {
+  const barHeight = 35; // Aumentado para que quepa el texto con saltos de línea
+
+  // Fondo encabezado
+  doc
+    .rect(barMargin, 120, doc.page.width - barMargin * 2, barHeight)
+    .fill("#1d113e");
+
+  // Calcular posiciones dinámicas de las columnas para ocupar todo el ancho
+  const tableWidth = doc.page.width - barMargin * 2;
+  const columnWidths = headers.map((h) => h.width * tableWidth);
+
+  // Calcular posiciones X de cada columna
+  const columnX: number[] = [];
+  let currentX = barMargin; // Sin padding inicial para usar todo el ancho
+  for (let i = 0; i < columnWidths.length; i++) {
+    columnX.push(currentX);
+    currentX += columnWidths[i];
+  }
+
+  doc.font("gilroy-bold").fontSize(9).fillColor("white");
+
+  headers.forEach((h, i) => {
+    // Calcular centrado vertical basado en el número de líneas
+    const numLines = h.label.split("\n").length;
+    const lineHeight = 10; // Altura aproximada por línea con fontSize 9
+    const textHeight = numLines * lineHeight;
+    const textYPosition = 120 + (barHeight - textHeight) / 2;
+
+    // Todos los textos centrados horizontalmente
+    doc.text(h.label, columnX[i], textYPosition, {
+      width: columnWidths[i],
+      align: "center",
+      lineGap: 2,
+    });
+  });
+
+  // Generar filas dinámicamente desde fondosData
+  doc.font("gilroy-regular").fontSize(10).fillColor("#000000");
+
+  return { columnX, columnWidths };
+};
+
+const transaccionesDeLosUltimos3Meses = (doc: any, eecc: Eecc) => {
+  const barMargin = 50;
+  // Cada tabla debe estar en su propia página
+  doc.addPage();
+
+  // ✅ Marca de agua
+  marcaDeAgua(doc, eecc.customer);
+
+  // Titulo de la seccion
+  subTitulo(doc, "Transacciones de los últimos 3 meses");
+
+  const { columnX, columnWidths } = cabeceraTablaTransacciones(doc, barMargin, [
+    { label: "FECHA DE\nSOLICITUD", width: 0.12 },
+    { label: "FECHA DE\nASIGNACIÓN", width: 0.13 },
+    { label: "FONDO MUTUO", width: 0.2 },
+    { label: "TIPO DE\nMOVIMIENTO", width: 0.12 },
+    { label: "N° DE\nCUOTAS", width: 0.11 },
+    { label: "VALOR\nCUOTA", width: 0.11 },
+    { label: "MONEDA", width: 0.1 },
+    { label: "MONTO", width: 0.11 },
+  ]);
+
+  // Renderizar filas de transacciones
+  let currentY = 155; // Posición inicial después del header
+  const rowHeight = 25;
+  const fontSize = 9;
+
+  doc.font("gilroy-regular").fontSize(fontSize).fillColor("#000000");
+
+  eecc.transactions.forEach((transaccion, index) => {
+    // Verificar si necesitamos una nueva página
+    if (currentY + rowHeight > doc.page.height - 50) {
+      doc.addPage();
+      marcaDeAgua(doc, eecc.customer);
+      currentY = 50;
+    }
+
+    // Fondo alternado para las filas
+    if (index % 2 === 0) {
+      doc
+        .rect(
+          barMargin,
+          currentY - 5,
+          doc.page.width - barMargin * 2,
+          rowHeight
+        )
+        .fill("#f5f5f5");
+      doc.fillColor("#000000");
+    }
+
+    // Columna 0: Fecha de solicitud (centrado)
+    doc.text(transaccion.creationDate, columnX[0], currentY, {
+      width: columnWidths[0],
+      align: "center",
+    });
+
+    // Columna 1: Fecha de asignación (centrado)
+    doc.text(transaccion.priceDate, columnX[1], currentY, {
+      width: columnWidths[1],
+      align: "center",
+    });
+
+    // Columna 2: Fondo mutuo (izquierda)
+    doc.text(transaccion.fund.id, columnX[2] + 5, currentY, {
+      width: columnWidths[2] - 10,
+      align: "left",
+    });
+
+    // Columna 3: Tipo de movimiento (centrado)
+    doc.text(transaccion.type, columnX[3], currentY, {
+      width: columnWidths[3],
+      align: "center",
+    });
+
+    // Columna 4: N° de cuotas (centrado)
+    doc.text(transaccion.shares, columnX[4], currentY, {
+      width: columnWidths[4],
+      align: "center",
+    });
+
+    // Columna 5: Valor cuota (centrado)
+    doc.text(transaccion.price, columnX[5], currentY, {
+      width: columnWidths[5],
+      align: "center",
+    });
+
+    // Columna 6: Moneda (centrado)
+    doc.text(transaccion.currency, columnX[6], currentY, {
+      width: columnWidths[6],
+      align: "center",
+    });
+
+    // Columna 7: Monto (derecha)
+    doc.text(
+      transaccion.amount.toLocaleString("es-PE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+      columnX[7],
+      currentY,
+      {
+        width: columnWidths[7] - 5,
+        align: "right",
+      }
+    );
+
+    currentY += rowHeight;
   });
 };
