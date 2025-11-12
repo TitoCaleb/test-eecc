@@ -5,8 +5,8 @@ import { config } from "../config";
 import { fromIni } from "@aws-sdk/credential-providers";
 
 export const lambdaClient = new LambdaClient({
-  region: "us-east-2",
-  credentials: fromIni({ profile: "blum" }),
+  // region: "us-east-2",
+  // credentials: fromIni({ profile: "blum" }),
 });
 
 export async function findByCustomer({

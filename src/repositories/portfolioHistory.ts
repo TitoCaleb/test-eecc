@@ -7,7 +7,7 @@ import { PortfolioHistory } from "../domain/PortfolioHistory";
 
 const dynamoDbClient = DynamoDBDocumentClient.from(
   new DynamoDBClient({
-    credentials: fromIni({ profile: "blum" }),
+    // credentials: fromIni({ profile: "blum" }),
   }),
   {
     marshallOptions: {

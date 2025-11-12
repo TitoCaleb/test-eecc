@@ -6,7 +6,7 @@ import { FundHistory } from "../domain/FundHistory";
 
 const dynamoDbClient = DynamoDBDocumentClient.from(
   new DynamoDBClient({
-    credentials: fromIni({ profile: "blum" }),
+    // credentials: fromIni({ profile: "blum" }),
   }),
   {
     marshallOptions: {
@@ -20,7 +20,7 @@ export async function findByIdAndDate(
 ): Promise<FundHistory> {
   const { Item } = await dynamoDbClient.send(
     new GetCommand({
-      TableName: `FundHistoryDb${config.env}`,
+      TableName: `FundsHistoryDb${config.env}`,
       Key: { id: `${request.id}|${request.series}`, date: request.date },
     })
   );

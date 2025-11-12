@@ -2,10 +2,8 @@ import { Eecc } from "../domain/Eecc";
 import * as PDFDocument from "pdfkit";
 import * as fs from "fs";
 import { Customer } from "../domain/Customer";
-import { Currency, Portfolio, PortfolioFund } from "../domain/Portfolio";
+import { PortfolioFund } from "../domain/Portfolio";
 import { PortfolioHistory } from "../domain/PortfolioHistory";
-import { findByIdAndDate } from "../repositories/fundHistory";
-import { FundHistory } from "../domain/FundHistory";
 import { ExchangeHistory } from "../domain/ExchangeHistory";
 
 export function generatePdf(eecc: Eecc) {
@@ -25,10 +23,13 @@ export function generatePdf(eecc: Eecc) {
   doc.registerFont("gilroy-semibold", "fonts/Gilroy-SemiBold.ttf");
   doc.registerFont("gilroy-thin", "fonts/Gilroy-Thin.ttf");
 
-  portada(doc, eecc.year, eecc.month);
+  // portada(doc, eecc.year, eecc.month);
 
   resumenPortafolio(doc, eecc);
-  posicionesDelPortafolio(doc, eecc);
+  posicionesDelPortafolio(doc, eecc.portfolioHistoryOfMonth, eecc.customer);
+  if (eecc.portfolioHistoryPastMonth) {
+    posicionesDelPortafolio(doc, eecc.portfolioHistoryPastMonth, eecc.customer);
+  }
   transaccionesDeLosUltimos3Meses(doc, eecc);
 
   // Cerrar PDF
@@ -118,7 +119,6 @@ const portada = (doc: any, year: string, month: string) => {
 
 const resumenPortafolio = (doc: any, eecc: Eecc) => {
   // Agregar nueva página
-  doc.addPage();
   // ✅ Marca de agua
   marcaDeAgua(doc, eecc.customer);
 
@@ -140,58 +140,55 @@ const resumenPortafolio = (doc: any, eecc: Eecc) => {
   const fontSize = 10; // Tamaño de fuente
   const textVerticalOffset = (rowBackgroundHeight - fontSize) / 2 - 2; // Centrado vertical
 
-  eecc.portfolioHistoryOfMonth.portfolio.funds
-    .filter((fondo) => fondo.id !== "cash")
-    .forEach((fondo, rowIndex) => {
-      // Posición Y de la fila (incluye margen antes de la primera fila)
-      const rowY =
-        140 + rowMargin + rowIndex * (rowBackgroundHeight + rowMargin);
+  eecc.portfolioResume.forEach((fondo, rowIndex) => {
+    // Posición Y de la fila (incluye margen antes de la primera fila)
+    const rowY = 140 + rowMargin + rowIndex * (rowBackgroundHeight + rowMargin);
 
-      // Dibujar fondo de la fila
-      doc
-        .rect(
-          barMargin,
-          rowY,
-          doc.page.width - barMargin * 2,
-          rowBackgroundHeight
-        )
-        .fill("#efefef");
+    // Dibujar fondo de la fila
+    doc
+      .rect(
+        barMargin,
+        rowY,
+        doc.page.width - barMargin * 2,
+        rowBackgroundHeight
+      )
+      .fill("#efefef");
 
-      // Restaurar color del texto después de dibujar el fondo
-      doc.fillColor("#000000");
+    // Restaurar color del texto después de dibujar el fondo
+    doc.fillColor("#000000");
 
-      // Formatear valores
-      const numeroFila = (rowIndex + 1).toString();
+    // Formatear valores
+    const numeroFila = (rowIndex + 1).toString();
 
-      const row = [
-        numeroFila,
-        `${fondo.id} ${fondo.series}`,
-        fondo.currency,
-        fondo.balance.amount,
-        fondo.costBasis,
-        "tobeDefined",
-      ];
+    const row = [
+      numeroFila,
+      fondo.name,
+      fondo.currency,
+      fondo.saves,
+      fondo.contribution,
+      fondo.rentability,
+    ];
 
-      // Posición Y del texto (centrado verticalmente en el fondo)
-      const textY = rowY + textVerticalOffset;
+    // Posición Y del texto (centrado verticalmente en el fondo)
+    const textY = rowY + textVerticalOffset;
 
-      row.forEach((value, colIndex) => {
-        // Columna FONDO (índice 1) alineada a la izquierda, el resto centradas
-        if (colIndex === 1) {
-          // FONDO: alineado a la izquierda
-          doc.text(value, columnX[colIndex] + 5, textY, {
-            width: columnWidths[colIndex] - 10,
-            align: "left",
-          });
-        } else {
-          // Resto de columnas: centradas usando el ancho de la columna
-          doc.text(value, columnX[colIndex], textY, {
-            width: columnWidths[colIndex],
-            align: "center",
-          });
-        }
-      });
+    row.forEach((value, colIndex) => {
+      // Columna FONDO (índice 1) alineada a la izquierda, el resto centradas
+      if (colIndex === 1) {
+        // FONDO: alineado a la izquierda
+        doc.text(value, columnX[colIndex] + 5, textY, {
+          width: columnWidths[colIndex] - 10,
+          align: "left",
+        });
+      } else {
+        // Resto de columnas: centradas usando el ancho de la columna
+        doc.text(value, columnX[colIndex], textY, {
+          width: columnWidths[colIndex],
+          align: "center",
+        });
+      }
     });
+  });
 
   distribuciones(
     doc,
@@ -201,7 +198,11 @@ const resumenPortafolio = (doc: any, eecc: Eecc) => {
   );
 };
 
-const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
+const posicionesDelPortafolio = (
+  doc: any,
+  portfolioHistory: PortfolioHistory,
+  customer: Customer
+) => {
   const barMargin = 50;
   const rowBackgroundHeight = 20; // Altura del fondo de la fila
   const rowMargin = 1.5; // Margen entre filas
@@ -214,7 +215,7 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
     USD: [],
   };
 
-  eecc.portfolioHistoryOfMonth.portfolio.funds
+  portfolioHistory.portfolio.funds
     .filter((fondo) => fondo.id !== "cash")
     .forEach((fondo) => {
       if (fondo.balance.currency === "PEN") {
@@ -228,7 +229,7 @@ const posicionesDelPortafolio = (doc: any, eecc: Eecc) => {
   doc.addPage();
 
   // ✅ Marca de agua
-  marcaDeAgua(doc, eecc.customer);
+  marcaDeAgua(doc, customer);
 
   // Titulo de la seccion
   subTitulo(doc, "Posiciones del portafolio");
