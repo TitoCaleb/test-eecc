@@ -49,8 +49,6 @@ async function init({
     })
   );
 
-  console.log(exchangeLastDateOfMonth);
-
   const portfolioResume = await getPortfolioResume(
     portfolio,
     lastPortfolioHistoryOfYearAndMonth
